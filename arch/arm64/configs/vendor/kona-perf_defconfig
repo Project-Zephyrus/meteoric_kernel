@@ -783,3 +783,10 @@ CONFIG_HZ_100=y
 # CONFIG_HZ_300 is not set
 # CONFIG_HZ_1000 is not set
 CONFIG_HZ=100
+
+#
+# FAIR Scheuler tunables
+#
+# CONFIG_PELT_UTIL_HALFLIFE_32 is not set
+CONFIG_PELT_UTIL_HALFLIFE_16=y
+# CONFIG_PELT_UTIL_HALFLIFE_8 is not set
