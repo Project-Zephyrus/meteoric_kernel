@@ -47,7 +47,7 @@ unsigned int tp_register_times = 0;
 //unsigned int probe_time = 0;
 struct touchpanel_data *g_tp = NULL;
 struct point_info *pre_points = NULL;
-int tp_1v8_power = 1;
+int tp_1v8_power = 0;
 static DECLARE_WAIT_QUEUE_HEAD(waiter);
 static struct input_dev *ps_input_dev = NULL;
 static int lcd_id = 0;
@@ -62,21 +62,17 @@ int pointx[2] = {0, 0};
 int pointy[2] = {0, 0};
 #define ABS(a,b) ((a - b > 0) ? a - b : b - a)
 
-static uint8_t DouTap_enable = 0;	        // double tap
-static uint8_t UpVee_enable  = 0;	        // V
-static uint8_t DownVee_enable = 0;		    // ^
-static uint8_t LeftVee_enable = 0; 			// >
-static uint8_t RightVee_enable = 0;			// <
-static uint8_t Circle_enable = 0;		    // O
-static uint8_t DouSwip_enable = 0; 			// ||
-static uint8_t Left2RightSwip_enable = 0;	// -->
-static uint8_t Right2LeftSwip_enable = 0;	// <--
-static uint8_t Up2DownSwip_enable = 0;	    // |v
-static uint8_t Down2UpSwip_enable = 0;	    // |^
-static uint8_t Mgestrue_enable = 0;			// M
-static uint8_t Wgestrue_enable = 0;			// W
-static uint8_t Sgestrue_enable = 0;			// S
-static uint8_t SingleTap_enable = 0;	    // single tap
+uint8_t DouTap_enable = 0;				 // double tap
+uint8_t UpVee_enable  = 0;				 // V
+uint8_t LeftVee_enable = 0; 			 // >
+uint8_t RightVee_enable = 0;			 // <
+uint8_t Circle_enable = 0;				 // O
+uint8_t DouSwip_enable = 0; 			 // ||
+uint8_t Mgestrue_enable = 0;			 // M
+uint8_t Wgestrue_enable = 0;			 // W
+uint8_t Sgestrue_enable = 0;			 // S
+uint8_t SingleTap_enable = 0;			 // single tap
+uint8_t Enable_gesture = 0;
 
 /*******Part2:declear Area********************************/
 static void speedup_resume(struct work_struct *work);
@@ -226,9 +222,6 @@ void operate_mode_switch(struct touchpanel_data *ts)
 		ts->ts_ops->mode_switch(ts->chip_data, MODE_LIMIT_SWITCH, ts->limit_switch);
 
 		ts->ts_ops->mode_switch(ts->chip_data, MODE_NORMAL, true);
-
-		if (ts->noise_level || ts->force_game_switch)
-			ts->ts_ops->mode_switch(ts->chip_data, MODE_GAME, true);
 	}
 }
 
@@ -376,8 +369,6 @@ int sec_double_tap(struct gesture_info *gesture)
 static void tp_gesture_handle(struct touchpanel_data *ts)
 {
 	struct gesture_info gesture_info_temp;
-    bool enabled = false;
-	int key = -1;
 
 	if (project_code == 20801) {
 		if (!ts->ts_ops->enable_single_tap) {
@@ -421,74 +412,20 @@ static void tp_gesture_handle(struct touchpanel_data *ts)
 			gesture_info_temp.gesture_type == SingleTap ? "(single tap)" :
 			gesture_info_temp.gesture_type == Wgestrue ? "(W)" : "unknown");
 
-	switch (gesture_info_temp.gesture_type) {
-		case DouTap:
-			enabled = DouTap_enable;
-			key = KEY_DOUBLE_TAP;
-			break;
-		case UpVee:
-			enabled = UpVee_enable;
-			key = KEY_GESTURE_DOWN_ARROW;
-			break;
-		case DownVee:
-			enabled = DownVee_enable;
-			key = KEY_GESTURE_UP_ARROW;
-			break;
-		case LeftVee:
-			enabled = LeftVee_enable;
-			key = KEY_GESTURE_RIGHT_ARROW;
-			break;
-		case RightVee:
-			enabled = RightVee_enable;
-			key = KEY_GESTURE_LEFT_ARROW;
-			break;
-		case Circle:
-			enabled = Circle_enable;
-			key = KEY_GESTURE_CIRCLE;
-			break;
-		case DouSwip:
-			enabled = DouSwip_enable;
-			key = KEY_GESTURE_TWO_SWIPE;
-			break;
-		case Left2RightSwip:
-			enabled = Left2RightSwip_enable;
-			key = KEY_GESTURE_SWIPE_RIGHT;
-			break;
-		case Right2LeftSwip:
-			enabled = Right2LeftSwip_enable;
-			key = KEY_GESTURE_SWIPE_LEFT;
-			break;
-		case Up2DownSwip:
-			enabled = Up2DownSwip_enable;
-			key = KEY_GESTURE_SWIPE_DOWN;
-			break;
-		case Down2UpSwip:
-			enabled = Down2UpSwip_enable;
-			key = KEY_GESTURE_SWIPE_UP;
-			break;
-		case Mgestrue:
-			enabled = Mgestrue_enable;
-			key = KEY_GESTURE_M;
-			break;
-		case Sgestrue:
-			enabled = Sgestrue_enable;
-			key = KEY_GESTURE_S;
-			break;
-		case SingleTap:
-			enabled = SingleTap_enable;
-			key = KEY_GESTURE_SINGLE_TAP;
-			break;
-		case Wgestrue:
-			enabled = Wgestrue_enable;
-			key = KEY_GESTURE_W;
-			break;
-	}
-
-    if (enabled) {
+	if ((gesture_info_temp.gesture_type == DouTap && DouTap_enable) ||
+			(gesture_info_temp.gesture_type == UpVee && UpVee_enable) ||
+			(gesture_info_temp.gesture_type ==  LeftVee&& LeftVee_enable) ||
+			(gesture_info_temp.gesture_type == RightVee && RightVee_enable) ||
+			(gesture_info_temp.gesture_type == Circle && Circle_enable) ||
+			(gesture_info_temp.gesture_type == DouSwip && DouSwip_enable) ||
+			(gesture_info_temp.gesture_type == Mgestrue && Mgestrue_enable) ||
+			(gesture_info_temp.gesture_type == Sgestrue && Sgestrue_enable) ||
+			(gesture_info_temp.gesture_type == SingleTap && SingleTap_enable) ||
+			(gesture_info_temp.gesture_type == Wgestrue && Wgestrue_enable)) {
 		memcpy(&ts->gesture, &gesture_info_temp, sizeof(struct gesture_info));
-		input_report_key(ts->input_dev, key, 1);
+		input_report_key(ts->input_dev, KEY_F4, 1);
 		input_sync(ts->input_dev);
-		input_report_key(ts->input_dev, key, 0);
+		input_report_key(ts->input_dev, KEY_F4, 0);
 		input_sync(ts->input_dev);
 	}
 }
@@ -1256,6 +1193,80 @@ void switch_usb_state(int usb_state)
 }
 EXPORT_SYMBOL(switch_usb_state);
 
+/*
+ *    gesture_enable = 0 : disable gesture
+ *    gesture_enable = 1 : enable gesture when ps is far away
+ *    gesture_enable = 2 : disable gesture when ps is near
+ */
+static ssize_t proc_gesture_control_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
+{
+	int value = 0;
+	char buf[4] = {0};
+	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+
+	if (count > 2)
+		return count;
+	if (!ts)
+		return count;
+
+	if (copy_from_user(buf, buffer, count)) {
+		TPD_INFO("%s: read proc input error.\n", __func__);
+		return count;
+	}
+	TPD_INFO("%s write argc1[0x%x],argc2[0x%x]\n",__func__,buf[0],buf[1]);
+	UpVee_enable = (buf[0] & BIT0)?1:0;
+	DouSwip_enable = (buf[0] & BIT1)?1:0;
+	LeftVee_enable = (buf[0] & BIT3)?1:0;
+	RightVee_enable = (buf[0] & BIT4)?1:0;
+	Circle_enable = (buf[0] & BIT6)?1:0;
+	DouTap_enable = (buf[0] & BIT7)?1:0;
+	Sgestrue_enable = (buf[1] & BIT0)?1:0;
+	Mgestrue_enable	= (buf[1] & BIT1)?1:0;
+	Wgestrue_enable = (buf[1] & BIT2)?1:0;
+	SingleTap_enable = (buf[1] & BIT3)?1:0;
+	Enable_gesture = (buf[1] & BIT7)?1:0;
+
+	if (UpVee_enable || DouSwip_enable || LeftVee_enable || RightVee_enable
+			|| Circle_enable || DouTap_enable || Sgestrue_enable || Mgestrue_enable
+			|| Wgestrue_enable || SingleTap_enable || Enable_gesture) {
+		value = 1;
+	} else {
+		value = 0;
+	}
+
+	mutex_lock(&ts->mutex);
+	if (ts->gesture_enable != value) {
+		ts->gesture_enable = value;
+		tp_1v8_power = ts->gesture_enable;
+		TPD_INFO("%s: gesture_enable = %d, is_suspended = %d\n", __func__, ts->gesture_enable, ts->is_suspended);
+		if (ts->is_incell_panel && (ts->suspend_state == TP_RESUME_EARLY_EVENT) && (ts->tp_resume_order == LCD_TP_RESUME)) {
+			TPD_INFO("tp will resume, no need mode_switch in incell panel\n"); /*avoid i2c error or tp rst pulled down in lcd resume*/
+		} else if (ts->is_suspended)
+			operate_mode_switch(ts);
+	}else {
+		TPD_INFO("%s: do not do same operator :%d\n", __func__, value);
+	}
+	mutex_unlock(&ts->mutex);
+
+	return count;
+}
+
+static ssize_t proc_gesture_control_read(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	char page[4] = {0};
+	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+
+	if (!ts)
+		return count;
+
+	TPD_DEBUG("gesture_enable is: %d\n", ts->gesture_enable);
+	ret = sprintf(page, "%d\n", ts->gesture_enable);
+	ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page));
+
+	return ret;
+}
+
 static ssize_t proc_coordinate_read(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
@@ -1275,6 +1286,13 @@ static ssize_t proc_coordinate_read(struct file *file, char __user *user_buf, si
 
 	return ret;
 }
+
+static const struct file_operations proc_gesture_control_fops = {
+	.write = proc_gesture_control_write,
+	.read  = proc_gesture_control_read,
+	.open  = simple_open,
+	.owner = THIS_MODULE,
+};
 
 static const struct file_operations proc_coordinate_fops = {
 	.read  = proc_coordinate_read,
@@ -1339,8 +1357,6 @@ static const struct file_operations proc_write_ps_status_fops = {
 	.owner = THIS_MODULE,
 };
 
-bool is_gaming __read_mostly;
-
 //proc/touchpanel/game_switch_enable
 static ssize_t proc_game_switch_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
 {
@@ -1367,12 +1383,6 @@ static ssize_t proc_game_switch_write(struct file *file, const char __user *buff
 		return count;
 	}
 	sscanf(buf, "%x", &value);
-
-	is_gaming = value > 0;
-
-	if (ts->force_game_switch)
-		return count;
-
 	ts->noise_level = value;
 	ts->game_mode_status = value > 0 ? 1 : 0;
 
@@ -1468,69 +1478,6 @@ static ssize_t proc_glass_switch_read(struct file *file, char __user *user_buf, 
 static const struct file_operations proc_glass_switch_fops = {
 	.write = proc_glass_switch_write,
 	.read  = proc_glass_switch_read,
-	.open  = simple_open,
-	.owner = THIS_MODULE,
-};
-
-//proc/touchpanel/force_game_switch
-static ssize_t proc_force_game_switch_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
-{
-	int value = 0 ;
-	char buf[4] = {0};
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-
-	if (count > 4) {
-		TPD_INFO("%s:count > 4\n",__func__);
-		return count;
-	}
-
-	if (!ts) {
-		TPD_INFO("%s: ts is NULL\n",__func__);
-		return count;
-	}
-
-	if (!ts->ts_ops->mode_switch) {
-		TPD_INFO("%s:not support ts_ops->mode_switch callback\n",__func__);
-		return count;
-	}
-	if (copy_from_user(buf, buffer, count)) {
-		TPD_INFO("%s: read proc input error.\n", __func__);
-		return count;
-	}
-	sscanf(buf, "%x", &value);
-	ts->force_game_switch = value > 0;
-
-	TPD_INFO("%s: force_game_switch value=0x%x\n", __func__, value);
-
-	if (!ts->is_suspended) {
-		mutex_lock(&ts->mutex);
-		ts->ts_ops->mode_switch(ts->chip_data, MODE_GAME, value > 0);
-		mutex_unlock(&ts->mutex);
-	} else {
-		TPD_INFO("%s: game_switch_support is_suspended.\n", __func__);
-	}
-
-	return count;
-}
-
-static ssize_t proc_force_game_switch_read(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
-{
-	int ret = 0;
-	char page[4] = {0};
-	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
-
-	if (!ts) {
-		sprintf(page, "%d\n", -1);//no support
-	} else {
-		sprintf(page, "%d\n", ts->force_game_switch);//support
-	}
-	ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page));
-	return ret;
-}
-
-static const struct file_operations proc_force_game_switch_fops = {
-	.write = proc_force_game_switch_write,
-	.read  = proc_force_game_switch_read,
 	.open  = simple_open,
 	.owner = THIS_MODULE,
 };
@@ -2491,7 +2438,7 @@ static ssize_t proc_register_info_read(struct file *file, char __user *user_buf,
 		TPD_INFO("ts->reg_info.reg_length error!\n");
 		return count;
 	}
-	ts->reg_info.reg_result = kzalloc(ts->reg_info.reg_length * (sizeof(uint16_t)), GFP_KERNEL | GFP_DMA);
+	ts->reg_info.reg_result = kzalloc(ts->reg_info.reg_length * (sizeof(uint16_t)), GFP_KERNEL);
 	if (!ts->reg_info.reg_result) {
 		TPD_INFO("ts->reg_info.reg_result kzalloc error\n");
 		return count;
@@ -2564,58 +2511,6 @@ static const struct file_operations proc_incell_panel_fops = {
 	.open = simple_open,
 	.read = proc_incell_panel_info_read,
 };
-
-#define GESTURE_ATTR(name, out) \
-	static ssize_t name##_enable_read_func(struct file *file, char __user *user_buf, size_t count, loff_t *ppos) \
-	{ \
-		int ret = 0; \
-		char page[PAGESIZE]; \
-		ret = sprintf(page, "%d\n", out); \
-		ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page)); \
-		return ret; \
-	} \
-	static ssize_t name##_enable_write_func(struct file *file, const char __user *user_buf, size_t count, loff_t *ppos) \
-	{ \
-		int enabled = 0; \
-		char page[PAGESIZE] = {0}; \
-		if (!copy_from_user(page, user_buf, count)) { \
-			sscanf(page, "%d", &enabled); \
-			out = enabled > 0 ? 1 : 0; \
-		} \
-		return count; \
-	} \
-	static const struct file_operations name##_enable_proc_fops = { \
-	    .write = name##_enable_write_func, \
-	    .read =  name##_enable_read_func, \
-	    .open = simple_open, \
-	    .owner = THIS_MODULE, \
-	};
-
-GESTURE_ATTR(single_tap, SingleTap_enable);
-GESTURE_ATTR(double_tap, DouTap_enable);
-GESTURE_ATTR(down_arrow, UpVee_enable);
-GESTURE_ATTR(up_arrow, DownVee_enable);
-GESTURE_ATTR(right_arrow, LeftVee_enable);
-GESTURE_ATTR(left_arrow, RightVee_enable);
-GESTURE_ATTR(double_swipe, DouSwip_enable);
-GESTURE_ATTR(down_swipe, Up2DownSwip_enable);
-GESTURE_ATTR(up_swipe, Down2UpSwip_enable);
-GESTURE_ATTR(right_swipe, Left2RightSwip_enable);
-GESTURE_ATTR(left_swipe, Right2LeftSwip_enable);
-GESTURE_ATTR(letter_o, Circle_enable);
-GESTURE_ATTR(letter_w, Wgestrue_enable);
-GESTURE_ATTR(letter_m, Mgestrue_enable);
-GESTURE_ATTR(letter_s, Sgestrue_enable);
-
-#define CREATE_PROC_NODE(PARENT, NAME, MODE) \
-	prEntry_tmp = proc_create(#NAME, MODE, PARENT, &NAME##_proc_fops); \
-	if (prEntry_tmp == NULL) { \
-		ret = -ENOMEM; \
-		TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__); \
-	}
-
-#define CREATE_GESTURE_NODE(NAME) \
-	CREATE_PROC_NODE(prEntry_tp, NAME##_enable, 0666)
 
 /**
  * init_touchpanel_proc - Using for create proc interface
@@ -2729,22 +2624,11 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 
 	//proc files-step2-4:/proc/touchpanel/double_tap_enable (black gesture related interface)
 	if (ts->black_gesture_support) {
-                CREATE_GESTURE_NODE(single_tap);
-		CREATE_GESTURE_NODE(double_tap);
-		CREATE_GESTURE_NODE(up_arrow);
-		CREATE_GESTURE_NODE(down_arrow);
-		CREATE_GESTURE_NODE(left_arrow);
-		CREATE_GESTURE_NODE(right_arrow);
-		CREATE_GESTURE_NODE(double_swipe);
-		CREATE_GESTURE_NODE(up_swipe);
-		CREATE_GESTURE_NODE(down_swipe);
-		CREATE_GESTURE_NODE(left_swipe);
-		CREATE_GESTURE_NODE(right_swipe);
-		CREATE_GESTURE_NODE(letter_o);
-		CREATE_GESTURE_NODE(letter_w);
-		CREATE_GESTURE_NODE(letter_m);
-		CREATE_GESTURE_NODE(letter_s);
-
+		prEntry_tmp = proc_create_data("gesture_enable", 0666, prEntry_tp, &proc_gesture_control_fops, ts);
+		if (prEntry_tmp == NULL) {
+			ret = -ENOMEM;
+			TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
+		}
 		prEntry_tmp = proc_create_data("coordinate", 0444, prEntry_tp, &proc_coordinate_fops, ts);
 		if (prEntry_tmp == NULL) {
 			ret = -ENOMEM;
@@ -2829,14 +2713,6 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
 		TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
-	}
-
-	if (ts->game_switch_support) {
-		prEntry_tmp = proc_create_data("force_game_switch_enable", 0666, prEntry_tp, &proc_force_game_switch_fops, ts);
-		if (prEntry_tmp == NULL) {
-			ret = -ENOMEM;
-			TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
-		}
 	}
 
 	prEntry_tmp = proc_create_data("gesture_switch", 0666, prEntry_tp, &proc_gesture_switch_fops, ts);
@@ -3424,7 +3300,7 @@ static ssize_t proc_earsense_rawdata_read(struct file *file, char __user *user_b
 		return 0;
 	}
 	if (ts->delta_state == TYPE_DELTA_IDLE) {
-		tmp_data = kzalloc(read_len ,GFP_KERNEL | GFP_DMA);
+		tmp_data = kzalloc(read_len ,GFP_KERNEL);
 		ts->earsense_ops->rawdata_read(ts->chip_data, tmp_data, read_len);
 		mutex_unlock(&ts->mutex);
 		ret = copy_to_user(user_buf, tmp_data, read_len);
@@ -3510,7 +3386,7 @@ static ssize_t proc_earsense_selfdata_read(struct file *file, char __user *user_
 		return 0;
 	}
 	if (ts->delta_state == TYPE_DELTA_IDLE) {
-		tmp_data = kzalloc(data_len ,GFP_KERNEL | GFP_DMA);
+		tmp_data = kzalloc(data_len ,GFP_KERNEL);
 		ts->earsense_ops->self_data_read(ts->chip_data, tmp_data, data_len);
 		mutex_unlock(&ts->mutex);
 		ret = copy_to_user(user_buf, tmp_data, data_len);
@@ -3964,7 +3840,6 @@ static const struct file_operations tp_charge_detect_fops = {
 	.open  = simple_open,
 	.owner = THIS_MODULE,
 };
-
 static ssize_t proc_wireless_charge_detect_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
 {
 	int value = 0;
@@ -4315,21 +4190,6 @@ static int init_input_device(struct touchpanel_data *ts)
 	set_bit(BTN_TOUCH, ts->input_dev->keybit);
 	if (ts->black_gesture_support) {
 		set_bit(KEY_F4, ts->input_dev->keybit);
-                set_bit(KEY_GESTURE_W, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_M, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_S, ts->input_dev->keybit);
-		set_bit(KEY_DOUBLE_TAP, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_CIRCLE, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_TWO_SWIPE, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_UP_ARROW, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_LEFT_ARROW, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_RIGHT_ARROW, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_DOWN_ARROW, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_SWIPE_LEFT, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_SWIPE_DOWN, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_SWIPE_RIGHT, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_SWIPE_UP, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_SINGLE_TAP, ts->input_dev->keybit);
 	}
 
 	ts->kpd_input_dev->name = TPD_DEVICE"_kpd";
@@ -5401,7 +5261,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		mutex_init(&ts->mutex_earsense);    // init earsense operate mutex
 
 		//malloc space for storing earsense delta
-		ts->earsense_delta = kzalloc(2 * ts->hw_res.EARSENSE_TX_NUM * ts->hw_res.EARSENSE_RX_NUM, GFP_KERNEL | GFP_DMA);
+		ts->earsense_delta = kzalloc(2 * ts->hw_res.EARSENSE_TX_NUM * ts->hw_res.EARSENSE_RX_NUM, GFP_KERNEL);
 		if (ts->earsense_delta == NULL) {
 			ret = -ENOMEM;
 			TPD_INFO("earsense_delta kzalloc error\n");
@@ -5425,7 +5285,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	ts->loading_fw = false;
 	ts->is_suspended = 0;
 	ts->suspend_state = TP_SPEEDUP_RESUME_COMPLETE;
-	ts->gesture_enable = 1;
+	ts->gesture_enable = 0;
 	ts->es_enable = 0;
 	ts->fd_enable = 0;
 	ts->palm_enable = 1;
@@ -5453,8 +5313,6 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		ts->monitor_data.eli_hor_range = 300;
 	}
 	ts->wet_mode_status = 0;
-	ts->noise_level = 0;
-	ts->force_game_switch = 0;
 	if (ts->project_info == 1) {//project 19811
 		ts->dead_zone_l = 25;
 		ts->dead_zone_p = 25;
@@ -5884,8 +5742,6 @@ static int tfb_notifier_callback(struct notifier_block *self, unsigned long even
 				mutex_lock(&ts->mutex);
 				if (!ts->is_suspended && (ts->suspend_state == TP_SPEEDUP_RESUME_COMPLETE)) {
 					ts->ts_ops->mode_switch(ts->chip_data, MODE_REFRESH_SWITCH, 0);
-					if (ts->noise_level || ts->force_game_switch)
-						ts->ts_ops->mode_switch(ts->chip_data, MODE_GAME, true);
 				}
 				mutex_unlock(&ts->mutex);
 			}
@@ -5894,8 +5750,6 @@ static int tfb_notifier_callback(struct notifier_block *self, unsigned long even
 				mutex_lock(&ts->mutex);
 				if (!ts->is_suspended && (ts->suspend_state == TP_SPEEDUP_RESUME_COMPLETE)) {
 					ts->ts_ops->mode_switch(ts->chip_data, MODE_REFRESH_SWITCH, 1);
-					if (ts->noise_level || ts->force_game_switch)
-						ts->ts_ops->mode_switch(ts->chip_data, MODE_GAME, true);
 				}
 				mutex_unlock(&ts->mutex);
 			}
@@ -5904,8 +5758,6 @@ static int tfb_notifier_callback(struct notifier_block *self, unsigned long even
 				mutex_lock(&ts->mutex);
 				if (!ts->is_suspended && (ts->suspend_state == TP_SPEEDUP_RESUME_COMPLETE)) {
 					ts->ts_ops->mode_switch(ts->chip_data, MODE_REFRESH_SWITCH, 1);
-					if (ts->noise_level || ts->force_game_switch)
-						ts->ts_ops->mode_switch(ts->chip_data, MODE_GAME, true);
 				}
 				mutex_unlock(&ts->mutex);
 			}
@@ -6022,14 +5874,12 @@ OUT:
 }
 #endif
 
-extern void touch_alloc_dma_buf(void);
 struct touchpanel_data *common_touch_data_alloc(void)
 {
 	if (g_tp) {
 		TPD_INFO("%s:common panel struct has alloc already!\n", __func__);
 		return NULL;
 	}
-    touch_alloc_dma_buf();
 	return kzalloc(sizeof(struct touchpanel_data), GFP_KERNEL);
 }
 

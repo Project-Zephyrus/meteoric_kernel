@@ -16,8 +16,6 @@
 #define TPD_DEVICE "touch_interface"
 #define TPD_INFO(a, arg...)  pr_debug("[TP]"TPD_DEVICE ": " a, ##arg)
 
-static struct touch_dma_buf *dma_buffer;
-
 /**
  * touch_i2c_continue_read - Using for "read sequence bytes" through IIC
  * @client: Handle to slave device
@@ -65,12 +63,13 @@ int touch_i2c_read_block(struct i2c_client* client, u16 addr, unsigned short len
 {
 	int retval;
 	unsigned char retry;
+	unsigned char buffer;
 	struct i2c_msg msg[2];
 
 	msg[0].addr = client->addr;
 	msg[0].flags = 0;
 	msg[0].len = 1;
-	msg[0].buf = dma_buffer->read_buf;
+	msg[0].buf = &buffer;
 	msg[0].buf[0] = addr & 0xff;
 
 	msg[1].addr = client->addr;
@@ -170,14 +169,14 @@ int touch_i2c_write_block(struct i2c_client* client, u16 addr, unsigned short le
 int touch_i2c_read_byte(struct i2c_client* client, unsigned short addr)
 {
     int retval = 0;
-    unsigned char *buf = dma_buffer->read_byte_buf;
+    unsigned char buf[2] = {0};
 
     if (unlikely(!client)) {
         dump_stack();
         return -1;
     }
     retval = touch_i2c_read_block(client, addr, 1, buf);
-    if (likely(retval == 1))
+    if (retval >= 0)
         retval = buf[0] & 0xff;
 
     return retval;
@@ -196,14 +195,15 @@ int touch_i2c_read_byte(struct i2c_client* client, unsigned short addr)
 int touch_i2c_write_byte(struct i2c_client* client, unsigned short addr, unsigned char data)
 {
     int retval;
+    int length_trans = 1;
     unsigned char data_send = data;
 
     if (unlikely(!client)) {
         dump_stack();
         return -EINVAL;
     }
-    retval = touch_i2c_write_block(client, addr, 1, &data_send);
-	if (likely(retval == 1))
+    retval = touch_i2c_write_block(client, addr, length_trans, &data_send);
+    if (retval == length_trans)
         retval = 0;
 
     return retval;
@@ -221,14 +221,14 @@ int touch_i2c_write_byte(struct i2c_client* client, unsigned short addr, unsigne
 int touch_i2c_read_word(struct i2c_client* client, unsigned short addr)
 {
     int retval;
-    unsigned char *buf = dma_buffer->read_word_buf;
+    unsigned char buf[2] = {0};
 
     if (unlikely(!client)) {
         dump_stack();
         return -EINVAL;
     }
     retval = touch_i2c_read_block(client, addr, 2, buf);
-    if (likely(retval >= 0))
+    if (retval >= 0)
         retval = buf[1] << 8 | buf[0];
 
     return retval;
@@ -246,18 +246,16 @@ int touch_i2c_read_word(struct i2c_client* client, unsigned short addr)
 int touch_i2c_write_word(struct i2c_client* client, unsigned short addr, unsigned short data)
 {
     int retval;
-    unsigned char buf[2];
+    int length_trans = 2;
+    unsigned char buf[2] = {data & 0xff, (data >> 8) & 0xff};
 
     if (unlikely(!client)) {
         dump_stack();
         return -EINVAL;
     }
 
-    buf[0] = data & 0xff;
-	buf[1] = (data >> 8) & 0xff;
-
-	retval = touch_i2c_write_block(client, addr, 2, buf);
-	if (likely(retval == 2))
+    retval = touch_i2c_write_block(client, addr, length_trans, buf);
+    if (retval == length_trans)
         retval = 0;
 
     return retval;
@@ -466,11 +464,5 @@ int32_t CTP_SPI_WRITE(struct spi_device *client, uint8_t *buf, uint16_t len)
 	}
 
 	return ret;
-}
-
-void touch_alloc_dma_buf(void)
-{
-	// DMA shouldn't be made with stack memory
-	dma_buffer = kmalloc(sizeof(struct touch_dma_buf), GFP_KERNEL | GFP_DMA);
 }
 
